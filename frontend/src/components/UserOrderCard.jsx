@@ -88,7 +88,7 @@ function UserOrderCard({ data }) {
                         <p className='font-semibold'>Subtotal: {shopOrder.subtotal}</p>
                         <span className='text-sm font-medium text-blue-600'>{deliveredShops[shopOrder._id] ? 'delivered' : shopOrder.status}</span>
                     </div>
-                    {(shopOrder.status === 'out of delivery') && !deliveredShops[shopOrder._id] && (
+                    {shopOrder.status !== 'delivered' && !deliveredShops[shopOrder._id] && (
                         <button
                             onClick={() => handleMarkDelivered(data._id, shopOrder._id)}
                             disabled={loading[shopOrder._id]}
