@@ -1,36 +1,43 @@
-import { Resend } from "resend"
+import nodemailer from "nodemailer"
+import dotenv from "dotenv"
+dotenv.config()
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.PASS,
+  },
+});
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = "onboarding@resend.dev"
-
-export const sendOtpMail = async (to, otp) => {
+export const sendOtpMail=async (to,otp) => {
     try {
-        const { error } = await resend.emails.send({
-            from: FROM_EMAIL,
+        await transporter.sendMail({
+            from:process.env.EMAIL,
             to,
-            subject: "Reset Your Password",
-            html: `<p>Your OTP for password reset is <b>${otp}</b>. It expires in 5 minutes.</p>`
+            subject:"Reset Your Password",
+            html:`<p>Your OTP for password reset is <b>${otp}</b>. It expires in 5 minutes.</p>`
         })
-        if (error) throw new Error(error.message)
         console.log('OTP mail sent to:', to)
     } catch (err) {
-        console.error('sendOtpMail ERROR:', err.message)
+        console.error('sendOtpMail ERROR:', err.message, err.code, err.response)
         throw err
     }
 }
 
-export const sendDeliveryOtpMail = async (user, otp) => {
+
+export const sendDeliveryOtpMail=async (user,otp) => {
     try {
-        const { error } = await resend.emails.send({
-            from: FROM_EMAIL,
-            to: user.email,
-            subject: "Delivery OTP",
-            html: `<p>Your OTP for delivery is <b>${otp}</b>. It expires in 5 minutes.</p>`
+        await transporter.sendMail({
+            from:process.env.EMAIL,
+            to:user.email,
+            subject:"Delivery OTP",
+            html:`<p>Your OTP for delivery is <b>${otp}</b>. It expires in 5 minutes.</p>`
         })
-        if (error) throw new Error(error.message)
         console.log('Delivery OTP mail sent to:', user.email)
     } catch (err) {
-        console.error('sendDeliveryOtpMail ERROR:', err.message)
+        console.error('sendDeliveryOtpMail ERROR:', err.message, err.code, err.response)
         throw err
     }
 }

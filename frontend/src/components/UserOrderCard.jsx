@@ -6,6 +6,21 @@ import { serverUrl } from '../App'
 function UserOrderCard({ data }) {
     const navigate = useNavigate()
     const [selectedRating, setSelectedRating] = useState({})//itemId:rating
+    const [deliveredShops, setDeliveredShops] = useState({})
+    const [loading, setLoading] = useState({})
+
+    const handleMarkDelivered = async (orderId, shopOrderId) => {
+        setLoading(prev => ({ ...prev, [shopOrderId]: true }))
+        try {
+            await axios.get(`${serverUrl}/api/order/mark-delivered/${orderId}/${shopOrderId}`, { withCredentials: true })
+            setDeliveredShops(prev => ({ ...prev, [shopOrderId]: true }))
+        } catch (error) {
+            console.log(error)
+            alert(error?.response?.data?.message || 'Failed to mark as delivered')
+        } finally {
+            setLoading(prev => ({ ...prev, [shopOrderId]: false }))
+        }
+    }
 
     const formatDate = (dateString) => {
         const date = new Date(dateString)
@@ -71,8 +86,17 @@ function UserOrderCard({ data }) {
                     </div>
                     <div className='flex justify-between items-center border-t pt-2'>
                         <p className='font-semibold'>Subtotal: {shopOrder.subtotal}</p>
-                        <span className='text-sm font-medium text-blue-600'>{shopOrder.status}</span>
+                        <span className='text-sm font-medium text-blue-600'>{deliveredShops[shopOrder._id] ? 'delivered' : shopOrder.status}</span>
                     </div>
+                    {(shopOrder.status === 'out of delivery') && !deliveredShops[shopOrder._id] && (
+                        <button
+                            onClick={() => handleMarkDelivered(data._id, shopOrder._id)}
+                            disabled={loading[shopOrder._id]}
+                            className='w-full mt-2 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white py-2 rounded-lg text-sm font-semibold transition-colors'
+                        >
+                            {loading[shopOrder._id] ? 'Marking...' : '✅ Mark as Delivered'}
+                        </button>
+                    )}
                 </div>
             ))}
 

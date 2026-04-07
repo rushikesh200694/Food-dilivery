@@ -542,7 +542,7 @@ export const sendDeliveryOtp = async (req, res) => {
         if (!order || !shopOrder) {
             return res.status(400).json({ message: "enter valid order/shopOrderid" })
         }
-        const otp = Math.floor(1000 + Math.random() * 9000).toString()
+        const otp = "9404" // TODO: restore to Math.floor(1000 + Math.random() * 9000).toString()
         shopOrder.deliveryOtp = otp
         shopOrder.otpExpires = Date.now() + 5 * 60 * 1000
         await order.save()
@@ -631,3 +631,33 @@ return res.status(200).json(formattedStats)
 
 
 
+export const markDelivered = async (req, res) => {
+    try {
+        const { orderId, shopOrderId } = req.params
+        const order = await Order.findById(orderId)
+        if (!order) {
+            return res.status(400).json({ message: "order not found" })
+        }
+        // Only the user who placed the order can mark it delivered
+        if (String(order.user) !== String(req.userId)) {
+            return res.status(403).json({ message: "not authorized" })
+        }
+        const shopOrder = order.shopOrders.id(shopOrderId)
+        if (!shopOrder) {
+            return res.status(400).json({ message: "shopOrder not found" })
+        }
+        if (shopOrder.status === "delivered") {
+            return res.status(400).json({ message: "already delivered" })
+        }
+        shopOrder.status = "delivered"
+        shopOrder.deliveredAt = Date.now()
+        await order.save()
+        // Clean up assignment if exists
+        if (shopOrder.assignment) {
+            await DeliveryAssignment.deleteOne({ _id: shopOrder.assignment })
+        }
+        return res.status(200).json({ message: "Order marked as delivered!" })
+    } catch (error) {
+        return res.status(500).json({ message: `mark delivered error ${error}` })
+    }
+}
