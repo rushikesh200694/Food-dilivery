@@ -19,6 +19,12 @@ export const getCurrentUser=async (req,res) => {
 export const updateUserLocation=async (req,res) => {
     try {
         const {lat,lon}=req.body
+        console.log('Updating location for user:', req.userId, 'Lat:', lat, 'Lon:', lon)
+        
+        if (!lat || !lon) {
+            return res.status(400).json({message:"lat and lon are required"})
+        }
+        
         const user=await User.findByIdAndUpdate(req.userId,{
             location:{
                 type:'Point',
@@ -26,12 +32,15 @@ export const updateUserLocation=async (req,res) => {
             }
         },{new:true})
          if(!user){
-               return res.status(400).json({message:"user is not found"})
+            console.log('User not found:', req.userId)
+            return res.status(400).json({message:"user is not found"})
         }
         
+        console.log('Location updated successfully for:', req.userId)
         return res.status(200).json({message:'location updated'})
     } catch (error) {
-           return res.status(500).json({message:`update location user error ${error}`})
+        console.error('Update location error:', error.message)
+           return res.status(500).json({message:`update location user error ${error.message}`})
     }
 }
 

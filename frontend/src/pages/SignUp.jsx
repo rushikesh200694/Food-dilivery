@@ -43,21 +43,30 @@ function SignUp() {
 
      const handleGoogleAuth=async () => {
         if(!mobile){
-          return setErr("mobile no is required")
+          return setErr("Mobile number is required")
         }
-        const provider=new GoogleAuthProvider()
-        const result=await signInWithPopup(auth,provider)
-  try {
-    const {data}=await axios.post(`${serverUrl}/api/auth/google-auth`,{
-        fullName:result.user.displayName,
-        email:result.user.email,
-        role,
-        mobile
-    },{withCredentials:true})
-   dispatch(setUserData(data))
-  } catch (error) {
-    console.log(error)
-  }
+        setLoading(true)
+        try {
+            const provider=new GoogleAuthProvider()
+            const result=await signInWithPopup(auth,provider)
+            console.log('Google sign up successful:', result.user.email)
+            
+            const {data}=await axios.post(`${serverUrl}/api/auth/google-auth`,{
+                fullName:result.user.displayName,
+                email:result.user.email,
+                role,
+                mobile
+            },{withCredentials:true})
+            
+            console.log('Backend google auth successful')
+            dispatch(setUserData(data))
+            setErr("")
+            setLoading(false)
+        } catch (error) {
+            setLoading(false)
+            console.error('Google auth error:', error)
+            setErr(error?.response?.data?.message || error.message || "Google sign up failed. Please try again.")
+        }
      }
     return (
         <div className='min-h-screen w-full flex items-center justify-center p-4' style={{ backgroundColor: bgColor }}>
@@ -123,9 +132,9 @@ function SignUp() {
             {err && <p className='text-red-500 text-center my-[10px]'>*{err}</p>}
             
 
-            <button className='w-full mt-4 flex items-center justify-center gap-2 border rounded-lg px-4 py-2 transition cursor-pointer duration-200 border-gray-400 hover:bg-gray-100' onClick={handleGoogleAuth}>
+            <button className='w-full mt-4 flex items-center justify-center gap-2 border rounded-lg px-4 py-2 transition cursor-pointer duration-200 border-gray-400 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed' onClick={handleGoogleAuth} disabled={loading}>
 <FcGoogle size={20}/>
-<span>Sign up with Google</span>
+<span>{loading ? 'Signing up...' : 'Sign up with Google'}</span>
             </button>
             <p className='text-center mt-6 cursor-pointer' onClick={()=>navigate("/signin")}>Already have an account ?  <span className='text-[#ff4d2d]'>Sign In</span></p>
             </div>

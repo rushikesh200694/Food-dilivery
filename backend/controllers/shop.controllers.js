@@ -45,15 +45,20 @@ export const getMyShop=async (req,res) => {
 export const getShopByCity=async (req,res) => {
     try {
         const {city}=req.params
+        console.log('Getting shops for city:', city)
+
+        if (!city || city.trim() === '') {
+            return res.status(400).json({message:"city parameter is required"})
+        }
 
         const shops=await Shop.find({
             city:{$regex:new RegExp(`^${city}$`, "i")}
         }).populate('items')
-        if(!shops){
-            return res.status(400).json({message:"shops not found"})
-        }
+        
+        console.log('Found shops:', shops.length)
         return res.status(200).json(shops)
     } catch (error) {
-        return res.status(500).json({message:`get shop by city error ${error}`})
+        console.error('Get shop by city error:', error.message)
+        return res.status(500).json({message:`get shop by city error ${error.message}`})
     }
 }

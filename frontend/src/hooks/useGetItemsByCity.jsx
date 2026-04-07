@@ -17,7 +17,9 @@ function useGetItemsByCity() {
         console.log(error)
     }
 }
-fetchItems()
+if(currentCity) {
+  fetchItems()
+}
  
   },[currentCity])
 }

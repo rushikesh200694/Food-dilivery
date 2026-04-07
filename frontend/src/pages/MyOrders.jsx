@@ -5,30 +5,38 @@ import { useNavigate } from 'react-router-dom';
 import UserOrderCard from '../components/UserOrderCard';
 import OwnerOrderCard from '../components/OwnerOrderCard';
 import { setMyOrders, updateOrderStatus, updateRealtimeOrderStatus } from '../redux/userSlice';
+import { getSocket, onSocketEvent, offSocketEvent } from '../services/socketService'
 
 
 function MyOrders() {
-  const { userData, myOrders,socket} = useSelector(state => state.user)
+  const { userData, myOrders } = useSelector(state => state.user)
   const navigate = useNavigate()
-const dispatch=useDispatch()
+  const dispatch = useDispatch()
+  
   useEffect(()=>{
-socket?.on('newOrder',(data)=>{
-if(data.shopOrders?.owner._id==userData._id){
-dispatch(setMyOrders([data,...myOrders]))
-}
-})
+    const socket = getSocket()
+    if (!socket) return
+    
+    const handleNewOrder = (data) => {
+      if(data.shopOrders?.owner._id == userData._id){
+        dispatch(setMyOrders([data,...myOrders]))
+      }
+    }
+    
+    const handleStatusUpdate = ({orderId, shopId, status, userId}) => {
+      if(userId == userData._id){
+        dispatch(updateRealtimeOrderStatus({orderId, shopId, status}))
+      }
+    }
+    
+    onSocketEvent('newOrder', handleNewOrder)
+    onSocketEvent('update-status', handleStatusUpdate)
 
-socket?.on('update-status',({orderId,shopId,status,userId})=>{
-if(userId==userData._id){
-  dispatch(updateRealtimeOrderStatus({orderId,shopId,status}))
-}
-})
-
-return ()=>{
-  socket?.off('newOrder')
-  socket?.off('update-status')
-}
-  },[socket])
+    return () => {
+      offSocketEvent('newOrder', handleNewOrder)
+      offSocketEvent('update-status', handleStatusUpdate)
+    }
+  }, [userData, myOrders, dispatch])
 
 
 

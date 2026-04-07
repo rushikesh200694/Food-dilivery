@@ -2,9 +2,12 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend"
   },
   "author": "Virtual code",
   "license": "ISC",

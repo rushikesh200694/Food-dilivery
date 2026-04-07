@@ -4,7 +4,7 @@ import SignUp from './pages/SignUp'
 import SignIn from './pages/SignIn'
 import ForgotPassword from './pages/ForgotPassword'
 import useGetCurrentUser from './hooks/useGetCurrentUser'
-import { useDispatch, useSelector } from 'react-redux'
+import { useSelector } from 'react-redux'
 import Home from './pages/Home'
 import useGetCity from './hooks/useGetCity'
 import useGetMyshop from './hooks/useGetMyShop'
@@ -22,13 +22,12 @@ import useUpdateLocation from './hooks/useUpdateLocation'
 import TrackOrderPage from './pages/TrackOrderPage'
 import Shop from './pages/Shop'
 import { useEffect } from 'react'
-import { io } from 'socket.io-client'
-import { setSocket } from './redux/userSlice'
+import { initSocket, disconnectSocket, onSocketEvent } from './services/socketService'
 
-export const serverUrl="http://localhost:8000"
+// Use relative API paths so requests stay same-origin (works with Vite proxy)
+export const serverUrl = ""
 function App() {
     const {userData}=useSelector(state=>state.user)
-    const dispatch=useDispatch()
   useGetCurrentUser()
 useUpdateLocation()
   useGetCity()
@@ -38,15 +37,14 @@ useUpdateLocation()
   useGetMyOrders()
 
   useEffect(()=>{
-const socketInstance=io(serverUrl,{withCredentials:true})
-dispatch(setSocket(socketInstance))
-socketInstance.on('connect',()=>{
-if(userData){
-  socketInstance.emit('identity',{userId:userData._id})
-}
+const socketInstance = initSocket()
+onSocketEvent('connect', () => {
+  if(userData){
+    socketInstance.emit('identity', {userId:userData._id})
+  }
 })
-return ()=>{
-  socketInstance.disconnect()
+return () => {
+  disconnectSocket()
 }
   },[userData?._id])
 

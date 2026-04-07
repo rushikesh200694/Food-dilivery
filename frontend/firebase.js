@@ -1,12 +1,12 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey:import.meta.env.VITE_FIREBASE_APIKEY,
+  apiKey: import.meta.env.VITE_FIREBASE_APIKEY,
   authDomain: "vingo-food-delivery.firebaseapp.com",
   projectId: "vingo-food-delivery",
   storageBucket: "vingo-food-delivery.firebasestorage.app",
@@ -16,5 +16,18 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth=getAuth(app)
-export {app,auth}
+const auth = getAuth(app);
+
+// Configure authorized domains
+auth.settings.appVerificationDisabledForTesting = false;
+
+// Handle password reset redirect results
+// This prevents unhandled promise rejections
+auth.onAuthStateChanged(() => {}, (error) => {
+  // Silently handle auth state errors – we use custom auth
+  if (error?.code !== 'auth/invalid-continue-uri') {
+    console.error('Auth error:', error);
+  }
+});
+
+export { app, auth };

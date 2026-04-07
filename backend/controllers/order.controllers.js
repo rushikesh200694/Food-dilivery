@@ -5,6 +5,7 @@ import User from "../models/user.model.js"
 import { sendDeliveryOtpMail } from "../utils/mail.js"
 import RazorPay from "razorpay"
 import dotenv from "dotenv"
+import { count } from "console"
 
 dotenv.config()
 let instance = new RazorPay({
@@ -14,12 +15,27 @@ let instance = new RazorPay({
 
 export const placeOrder = async (req, res) => {
     try {
+        console.log('=== Place Order Request ===')
+        console.log('Body:', req.body)
+        console.log('userId:', req.userId)
+        
         const { cartItems, paymentMethod, deliveryAddress, totalAmount } = req.body
-        if (cartItems.length == 0 || !cartItems) {
+        
+        if (!cartItems || cartItems.length == 0) {
             return res.status(400).json({ message: "cart is empty" })
         }
-        if (!deliveryAddress.text || !deliveryAddress.latitude || !deliveryAddress.longitude) {
+        if (!deliveryAddress?.text || !deliveryAddress?.latitude || !deliveryAddress?.longitude) {
             return res.status(400).json({ message: "send complete deliveryAddress" })
+        }
+        if (!totalAmount || totalAmount <= 0) {
+            return res.status(400).json({ message: "invalid total amount" })
+        }
+
+        // Validate each cart item has required fields
+        for (const item of cartItems) {
+            if (!item.id || !item.price || !item.quantity || !item.shop) {
+                return res.status(400).json({ message: "cart items missing required fields" })
+            }
         }
 
         const groupItemsByShop = {}
@@ -32,14 +48,18 @@ export const placeOrder = async (req, res) => {
             groupItemsByShop[shopId].push(item)
         });
 
-        const shopOrders = await Promise.all(Object.keys(groupItemsByShop).map(async (shopId) => {
+        const shopOrders = []
+        for (const shopId of Object.keys(groupItemsByShop)) {
+            console.log('Processing shop:', shopId)
             const shop = await Shop.findById(shopId).populate("owner")
             if (!shop) {
-                return res.status(400).json({ message: "shop not found" })
+                console.log('ERROR: Shop not found:', shopId)
+                return res.status(400).json({ message: `shop not found: ${shopId}` })
             }
             const items = groupItemsByShop[shopId]
             const subtotal = items.reduce((sum, i) => sum + Number(i.price) * Number(i.quantity), 0)
-            return {
+            console.log('Shop:', shop._id, 'Subtotal:', subtotal)
+            shopOrders.push({
                 shop: shop._id,
                 owner: shop.owner._id,
                 subtotal,
@@ -49,16 +69,21 @@ export const placeOrder = async (req, res) => {
                     quantity: i.quantity,
                     name: i.name
                 }))
-            }
+            })
         }
-        ))
+        
+        console.log('All shopOrders prepared:', JSON.stringify(shopOrders, null, 2))
 
         if (paymentMethod == "online") {
+            console.log('Creating Razorpay order for online payment...')
             const razorOrder = await instance.orders.create({
                 amount: Math.round(totalAmount * 100),
                 currency: 'INR',
                 receipt: `receipt_${Date.now()}`
             })
+            console.log('Razorpay order created:', razorOrder.id)
+            
+            console.log('Creating order in database with razorpayOrderId...')
             const newOrder = await Order.create({
                 user: req.userId,
                 paymentMethod,
@@ -68,6 +93,8 @@ export const placeOrder = async (req, res) => {
                 razorpayOrderId: razorOrder.id,
                 payment: false
             })
+            
+            console.log('Order created successfully:', newOrder._id)
 
             return res.status(200).json({
                 razorOrder,
@@ -76,6 +103,7 @@ export const placeOrder = async (req, res) => {
 
         }
 
+        console.log('Creating new order in database...')
         const newOrder = await Order.create({
             user: req.userId,
             paymentMethod,
@@ -83,6 +111,8 @@ export const placeOrder = async (req, res) => {
             totalAmount,
             shopOrders
         })
+        
+        console.log('Order created successfully:', newOrder._id)
 
         await newOrder.populate("shopOrders.shopOrderItems.item", "name image price")
         await newOrder.populate("shopOrders.shop", "name")
@@ -108,24 +138,43 @@ export const placeOrder = async (req, res) => {
             });
         }
 
-
-
         return res.status(201).json(newOrder)
     } catch (error) {
-        return res.status(500).json({ message: `place order error ${error}` })
+        console.error('Place order error details:', {
+            message: error.message,
+            stack: error.stack,
+            validationErrors: error.errors || null,
+            requestBody: req.body
+        })
+        return res.status(500).json({ 
+            message: `Place order error: ${error.message}`,
+            details: error.errors || error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        })
     }
 }
 
 export const verifyPayment = async (req, res) => {
     try {
         const { razorpay_payment_id, orderId } = req.body
-        const payment = await instance.payments.fetch(razorpay_payment_id)
-        if (!payment || payment.status != "captured") {
-            return res.status(400).json({ message: "payment not captured" })
+        
+        if (!razorpay_payment_id || !orderId) {
+            return res.status(400).json({ message: "Missing payment or order information" })
         }
+        
+        const payment = await instance.payments.fetch(razorpay_payment_id)
+        
+        if (!payment) {
+            return res.status(400).json({ message: "Payment record not found" })
+        }
+        
+        if (payment.status !== "captured") {
+            return res.status(400).json({ message: `Payment status is ${payment.status}, not captured` })
+        }
+        
         const order = await Order.findById(orderId)
         if (!order) {
-            return res.status(400).json({ message: "order not found" })
+            return res.status(400).json({ message: "Order not found" })
         }
 
         order.payment = true
@@ -156,11 +205,11 @@ export const verifyPayment = async (req, res) => {
             });
         }
 
-
         return res.status(200).json(order)
 
     } catch (error) {
-        return res.status(500).json({ message: `verify payment  error ${error}` })
+        console.error('Verify payment error:', error)
+        return res.status(500).json({ message: `Payment verification error: ${error.message}` })
     }
 }
 
@@ -532,7 +581,53 @@ export const verifyDeliveryOtp = async (req, res) => {
     }
 }
 
+export const getTodayDeliveries=async (req,res) => {
+    try {
+        const deliveryBoyId=req.userId
+        const startsOfDay=new Date()
+        startsOfDay.setHours(0,0,0,0)
 
+        const orders=await Order.find({
+           "shopOrders.assignedDeliveryBoy":deliveryBoyId,
+           "shopOrders.status":"delivered",
+           "shopOrders.deliveredAt":{$gte:startsOfDay}
+        }).lean()
+
+     let todaysDeliveries=[] 
+     
+     orders.forEach(order=>{
+        order.shopOrders.forEach(shopOrder=>{
+            if(shopOrder.assignedDeliveryBoy==deliveryBoyId &&
+                shopOrder.status=="delivered" &&
+                shopOrder.deliveredAt &&
+                shopOrder.deliveredAt>=startsOfDay
+            ){
+                todaysDeliveries.push(shopOrder)
+            }
+        })
+     })
+
+let stats={}
+
+todaysDeliveries.forEach(shopOrder=>{
+    const hour=new Date(shopOrder.deliveredAt).getHours()
+    stats[hour]=(stats[hour] || 0) + 1
+})
+
+let formattedStats=Object.keys(stats).map(hour=>({
+ hour:parseInt(hour),
+ count:stats[hour]   
+}))
+
+formattedStats.sort((a,b)=>a.hour-b.hour)
+
+return res.status(200).json(formattedStats)
+  
+
+    } catch (error) {
+        return res.status(500).json({ message: `today deliveries error ${error}` }) 
+    }
+}
 
 
 

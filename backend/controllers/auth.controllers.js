@@ -26,12 +26,15 @@ export const signUp=async (req,res) => {
         })
 
         const token=await genToken(user._id)
-        res.cookie("token",token,{
-            secure:false,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000,
-            httpOnly:true
-        })
+        const isProd = process.env.NODE_ENV === "production"
+        const cookieOptions = {
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
+            maxAge: 7*24*60*60*1000,
+            httpOnly: true,
+            path: "/"
+        }
+        res.cookie("token", token, cookieOptions)
   
         return res.status(201).json(user)
 
@@ -54,12 +57,15 @@ export const signIn=async (req,res) => {
      }
 
         const token=await genToken(user._id)
-        res.cookie("token",token,{
-            secure:false,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000,
-            httpOnly:true
-        })
+        const isProd = process.env.NODE_ENV === "production"
+        const cookieOptions = {
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
+            maxAge: 7*24*60*60*1000,
+            httpOnly: true,
+            path: "/"
+        }
+        res.cookie("token", token, cookieOptions)
   
         return res.status(200).json(user)
 
@@ -70,8 +76,13 @@ export const signIn=async (req,res) => {
 
 export const signOut=async (req,res) => {
     try {
-        res.clearCookie("token")
-return res.status(200).json({message:"log out successfully"})
+        const isProd = process.env.NODE_ENV === "production"
+        res.clearCookie("token", {
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
+            path: "/"
+        })
+        return res.status(200).json({message:"log out successfully"})
     } catch (error) {
         return res.status(500).json(`sign out error ${error}`)
     }
@@ -133,25 +144,58 @@ export const resetPassword=async (req,res) => {
 export const googleAuth=async (req,res) => {
     try {
         const {fullName,email,mobile,role}=req.body
+        
+        console.log('Google auth request:', {email, fullName, mobile, role})
+        
+        if (!email) {
+            return res.status(400).json({message:"Email is required"})
+        }
+        
         let user=await User.findOne({email})
+        
         if(!user){
+            // New user - create account
+            if (!fullName || !mobile) {
+                return res.status(400).json({message:"Full name and mobile number required for new account"})
+            }
+            
+            console.log('Creating new user:', email)
             user=await User.create({
-                fullName,email,mobile,role
+                fullName,
+                email,
+                mobile,
+                role: role || "user"
             })
+            console.log('New user created:', user._id)
+        } else {
+            // Existing user - update if needed
+            console.log('Existing user found:', user._id)
+            if (fullName && fullName !== user.fullName) {
+                user.fullName = fullName
+            }
+            if (mobile && mobile !== user.mobile) {
+                user.mobile = mobile
+            }
+            await user.save()
         }
 
         const token=await genToken(user._id)
-        res.cookie("token",token,{
-            secure:false,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000,
-            httpOnly:true
-        })
-  
+        const isProd = process.env.NODE_ENV === "production"
+        const cookieOptions = {
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
+            maxAge: 7*24*60*60*1000,
+            httpOnly: true,
+            path: "/"
+        }
+        res.cookie("token", token, cookieOptions)
+        
+        console.log('Google auth successful for:', user._id)
         return res.status(200).json(user)
 
 
     } catch (error) {
-         return res.status(500).json(`googleAuth error ${error}`)
+        console.error('Google auth error:', error.message)
+         return res.status(500).json({message:`googleAuth error ${error.message}`})
     }
 }

@@ -28,6 +28,8 @@ function CheckOut() {
     const { cartItems ,totalAmount,userData} = useSelector(state => state.user)
   const [addressInput, setAddressInput] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("cod")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
   const navigate=useNavigate()
   const dispatch = useDispatch()
   const apiKey = import.meta.env.VITE_GEOAPIKEY
@@ -74,7 +76,18 @@ function CheckOut() {
   }
 
   const handlePlaceOrder=async () => {
+    setError("")
     try {
+      if (!location.lat || !location.lon) {
+        setError('Please select a valid delivery location')
+        return
+      }
+      if (!addressInput.trim()) {
+        setError('Please enter a delivery address')
+        return
+      }
+      
+      setLoading(true)
       const result=await axios.post(`${serverUrl}/api/order/place-order`,{
         paymentMethod,
         deliveryAddress:{
@@ -86,47 +99,77 @@ function CheckOut() {
         cartItems
       },{withCredentials:true})
 
+      setLoading(false)
       if(paymentMethod=="cod"){
-      dispatch(addMyOrder(result.data))
-      navigate("/order-placed")
+        dispatch(addMyOrder(result.data))
+        navigate("/order-placed")
       }else{
         const orderId=result.data.orderId
         const razorOrder=result.data.razorOrder
-          openRazorpayWindow(orderId,razorOrder)
-       }
+        openRazorpayWindow(orderId,razorOrder)
+      }
     
     } catch (error) {
-      console.log(error)
+      setLoading(false)
+      console.error('Place order error:', error)
+      const errorMessage = error?.response?.data?.message || error?.response?.data?.details || error.message || 'Failed to place order. Please try again.'
+      setError(errorMessage)
     }
   }
 
 const openRazorpayWindow=(orderId,razorOrder)=>{
+  if (!window.Razorpay) {
+    setError('Razorpay is not loaded. Please refresh the page and try again.')
+    return
+  }
+
+  if (!import.meta.env.VITE_RAZORPAY_KEY_ID) {
+    setError('Razorpay key is not configured')
+    console.error('Razorpay key not found in environment variables')
+    return
+  }
 
   const options={
- key:import.meta.env.VITE_RAZORPAY_KEY_ID,
- amount:razorOrder.amount,
- currency:'INR',
- name:"Vingo",
- description:"Food Delivery Website",
- order_id:razorOrder.id,
- handler:async function (response) {
-  try {
-    const result=await axios.post(`${serverUrl}/api/order/verify-payment`,{
-      razorpay_payment_id:response.razorpay_payment_id,
-      orderId
-    },{withCredentials:true})
+    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    amount: razorOrder.amount,
+    currency: 'INR',
+    name: "Vingo",
+    description: "Food Delivery Website",
+    order_id: razorOrder.id,
+    handler: async function (response) {
+      try {
+        console.log('Payment successful:', response)
+        setLoading(true)
+        const result = await axios.post(`${serverUrl}/api/order/verify-payment`,{
+          razorpay_payment_id: response.razorpay_payment_id,
+          orderId
+        },{withCredentials: true})
+        setLoading(false)
         dispatch(addMyOrder(result.data))
-      navigate("/order-placed")
+        navigate("/order-placed")
+      } catch (error) {
+        setLoading(false)
+        console.error('Payment verification error:', error)
+        setError(error?.response?.data?.message || 'Payment verification failed. Please contact support.')
+      }
+    },
+    onClose: function() {
+      console.log('Razorpay window closed')
+      setError('Payment cancelled. Your order has been saved. You can pay later.')
+    },
+    onError: function(error) {
+      console.error('Razorpay error:', error)
+      setError(error?.reason || 'Payment failed. Please try again.')
+    }
+  }
+
+  try {
+    const rzp = new window.Razorpay(options)
+    rzp.open()
   } catch (error) {
-    console.log(error)
+    console.error('Failed to open Razorpay:', error)
+    setError('Failed to open payment window. Please try again.')
   }
- }
-  }
-
-  const rzp=new window.Razorpay(options)
-  rzp.open()
-
-
 }
 
 
@@ -225,7 +268,16 @@ const openRazorpayWindow=(orderId,razorOrder)=>{
 </div>
 </div>
         </section>
-        <button className='w-full bg-[#ff4d2d] hover:bg-[#e64526] text-white py-3 rounded-xl font-semibold' onClick={handlePlaceOrder}> {paymentMethod=="cod"?"Place Order":"Pay & Place Order"}</button>
+        {error && <div className='bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm'>
+          {error}
+        </div>}
+        <button 
+          className={`w-full py-3 rounded-xl font-semibold transition ${loading || cartItems.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#ff4d2d] hover:bg-[#e64526]'} text-white`}
+          onClick={handlePlaceOrder}
+          disabled={loading || cartItems.length === 0}
+        > 
+          {loading ? 'Processing...' : (paymentMethod=="cod"?"Place Order":"Pay & Place Order")}
+        </button>
 
       </div>
     </div>

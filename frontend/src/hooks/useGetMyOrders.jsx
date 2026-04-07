@@ -20,7 +20,9 @@ function useGetMyOrders() {
         console.log(error)
     }
 }
-  fetchOrders()
+  if(userData) {
+    fetchOrders()
+  }
 
  
   

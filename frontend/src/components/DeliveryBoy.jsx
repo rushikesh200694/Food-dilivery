@@ -1,5 +1,5 @@
 import React from 'react'
-import Nav from './NaV.JSX'
+import Nav from './Nav'
 import { useSelector } from 'react-redux'
 import axios from 'axios'
 import { serverUrl } from '../App'
@@ -7,44 +7,54 @@ import { useEffect } from 'react'
 import { useState } from 'react'
 import DeliveryBoyTracking from './DeliveryBoyTracking'
 import { ClipLoader } from 'react-spinners'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { getSocket, emitSocketEvent, onSocketEvent, offSocketEvent } from '../services/socketService'
 
 function DeliveryBoy() {
-  const {userData,socket}=useSelector(state=>state.user)
+  const {userData}=useSelector(state=>state.user)
   const [currentOrder,setCurrentOrder]=useState()
   const [showOtpBox,setShowOtpBox]=useState(false)
   const [availableAssignments,setAvailableAssignments]=useState(null)
   const [otp,setOtp]=useState("")
-const [deliveryBoyLocation,setDeliveryBoyLocation]=useState(null)
-const [loading,setLoading]=useState(false)
-const [message,setMessage]=useState("")
+  const [todayDeliveries,setTodayDeliveries]=useState([])
+  const [deliveryBoyLocation,setDeliveryBoyLocation]=useState(null)
+  const [loading,setLoading]=useState(false)
+  const [message,setMessage]=useState("")
+  
   useEffect(()=>{
-if(!socket || userData.role!=="deliveryBoy") return
-let watchId
-if(navigator.geolocation){
-watchId=navigator.geolocation.watchPosition((position)=>{
-    const latitude=position.coords.latitude
-    const longitude=position.coords.longitude
-    setDeliveryBoyLocation({lat:latitude,lon:longitude})
-    socket.emit('updateLocation',{
-      latitude,
-      longitude,
-      userId:userData._id
-    })
-  }),
-  (error)=>{
-    console.log(error)
-  },
-  {
-    enableHighAccuracy:true
-  }
-}
+    if(userData.role!=="deliveryBoy") return
+    
+    const socket = getSocket()
+    if (!socket) return
+    
+    let watchId
+    if(navigator.geolocation){
+      watchId = navigator.geolocation.watchPosition((position)=>{
+        const latitude = position.coords.latitude
+        const longitude = position.coords.longitude
+        setDeliveryBoyLocation({lat:latitude,lon:longitude})
+        emitSocketEvent('updateLocation', {
+          latitude,
+          longitude,
+          userId:userData._id
+        })
+      },
+      (error)=>{
+        console.log(error)
+      },
+      {
+        enableHighAccuracy:true
+      }
+    )}
 
-return ()=>{
-  if(watchId)navigator.geolocation.clearWatch(watchId)
-}
+    return ()=>{
+      if(watchId) navigator.geolocation.clearWatch(watchId)
+    }
+  }, [userData])
 
-  },[socket,userData])
 
+const ratePerDelivery=50
+const totalEarning=todayDeliveries.reduce((sum,d)=>sum + d.count*ratePerDelivery,0)
 
 
 
@@ -79,13 +89,19 @@ return ()=>{
   }
 
   useEffect(()=>{
-    socket.on('newAssignment',(data)=>{
-      setAvailableAssignments(prev=>([...prev,data]))
-    })
-    return ()=>{
-      socket.off('newAssignment')
+    const socket = getSocket()
+    if (!socket) return
+    
+    const handleNewAssignment = (data) => {
+      setAvailableAssignments(prev=>([...prev, data]))
     }
-  },[socket])
+    
+    onSocketEvent('newAssignment', handleNewAssignment)
+    
+    return ()=>{
+      offSocketEvent('newAssignment', handleNewAssignment)
+    }
+  }, [])
   
   const sendOtp=async () => {
     setLoading(true)
@@ -109,18 +125,29 @@ return ()=>{
       },{withCredentials:true})
     console.log(result.data)
     setMessage(result.data.message)
+    location.reload()
     } catch (error) {
       console.log(error)
     }
   }
 
 
-
+   const handleTodayDeliveries=async () => {
+    
+    try {
+      const result=await axios.get(`${serverUrl}/api/order/get-today-deliveries`,{withCredentials:true})
+    console.log(result.data)
+   setTodayDeliveries(result.data)
+    } catch (error) {
+      console.log(error)
+    }
+  }
  
 
   useEffect(()=>{
 getAssignments()
 getCurrentOrder()
+handleTodayDeliveries()
   },[userData])
   return (
     <div className='w-screen min-h-screen flex flex-col gap-5 items-center bg-[#fff9f6] overflow-y-auto'>
@@ -130,6 +157,27 @@ getCurrentOrder()
 <h1 className='text-xl font-bold text-[#ff4d2d]'>Welcome, {userData.fullName}</h1>
 <p className='text-[#ff4d2d] '><span className='font-semibold'>Latitude:</span> {deliveryBoyLocation?.lat}, <span className='font-semibold'>Longitude:</span> {deliveryBoyLocation?.lon}</p>
     </div>
+
+<div className='bg-white rounded-2xl shadow-md p-5 w-[90%] mb-6 border border-orange-100'>
+  <h1 className='text-lg font-bold mb-3 text-[#ff4d2d] '>Today Deliveries</h1>
+
+  <ResponsiveContainer width="100%" height={200}>
+   <BarChart data={todayDeliveries}>
+  <CartesianGrid strokeDasharray="3 3"/>
+  <XAxis dataKey="hour" tickFormatter={(h)=>`${h}:00`}/>
+    <YAxis  allowDecimals={false}/>
+    <Tooltip formatter={(value)=>[value,"orders"]} labelFormatter={label=>`${label}:00`}/>
+      <Bar dataKey="count" fill='#ff4d2d'/>
+   </BarChart>
+  </ResponsiveContainer>
+
+  <div className='max-w-sm mx-auto mt-6 p-6 bg-white rounded-2xl shadow-lg text-center'>
+<h1 className='text-xl font-semibold text-gray-800 mb-2'>Today's Earning</h1>
+<span className='text-3xl font-bold text-green-600'>₹{totalEarning}</span>
+  </div>
+</div>
+
+
 {!currentOrder && <div className='bg-white rounded-2xl p-5 shadow-md w-[90%] border border-orange-100'>
 <h1 className='text-lg font-bold mb-4 flex items-center gap-2'>Available Orders</h1>
 

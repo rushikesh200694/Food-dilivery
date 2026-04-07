@@ -1,6 +1,9 @@
 import express from "express"
 import dotenv from "dotenv"
 dotenv.config()
+import path from "path"
+import { fileURLToPath } from "url"
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import connectDb from "./config/db.js"
 import cookieParser from "cookie-parser"
 import authRouter from "./routes/auth.routes.js"
@@ -30,9 +33,10 @@ app.set("io",io)
 
 
 const port=process.env.PORT || 5000
+const clientUrl = process.env.CLIENT_URL || "http://localhost:5173"
 app.use(cors({
-    origin:"http://localhost:5173",
-    credentials:true
+    origin: clientUrl,
+    credentials: true
 }))
 app.use(express.json())
 app.use(cookieParser())
@@ -41,6 +45,13 @@ app.use("/api/user",userRouter)
 app.use("/api/shop",shopRouter)
 app.use("/api/item",itemRouter)
 app.use("/api/order",orderRouter)
+
+if(process.env.NODE_ENV === "production"){
+    app.use(express.static(path.join(__dirname,"../frontend/dist")))
+    app.get("*",(req,res)=>{
+        res.sendFile(path.resolve(__dirname,"../frontend/dist","index.html"))
+    })
+}
 
 socketHandler(io)
 server.listen(port,()=>{
