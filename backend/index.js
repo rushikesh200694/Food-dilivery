@@ -20,9 +20,11 @@ import { socketHandler } from "./socket.js"
 const app=express()
 const server=http.createServer(app)
 
+const clientUrl = process.env.CLIENT_URL || "http://localhost:5173"
+
 const io=new Server(server,{
    cors:{
-    origin:"http://localhost:5173",
+    origin: clientUrl,
     credentials:true,
     methods:['POST','GET']
 }
@@ -33,7 +35,6 @@ app.set("io",io)
 
 
 const port=process.env.PORT || 5000
-const clientUrl = process.env.CLIENT_URL || "http://localhost:5173"
 app.use(cors({
     origin: clientUrl,
     credentials: true
